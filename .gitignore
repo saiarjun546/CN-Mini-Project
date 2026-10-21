@@ -1,0 +1,53 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# C compiled files
+*.o
+*.out
+*.a
+*.so
+*.exe
+server/time_server
+
+# Build directories
+build/
+dist/
+
+# Generated experiment results
+results/*.csv
+results/*.json
+results/*.png
+results/*.pdf
+
+# Logs
+*.log
+logs/
+
+# Packet captures
+*.pcap
+*.pcapng
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+
+# IDE and editor settings
+.vscode/
+.idea/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Keep empty results directory
+!results/.gitkeep
+this is the .gitignore file

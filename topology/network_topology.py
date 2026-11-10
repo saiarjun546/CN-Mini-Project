@@ -1,3 +1,5 @@
+import argparse
+from qos_config import configure_qos
 from mininet.net import Mininet
 from mininet.node import OVSSwitch
 from mininet.link import TCLink
@@ -5,7 +7,7 @@ from mininet.cli import CLI
 from mininet.log import setLogLevel
 
 
-def create_network():
+def create_network(args):
     net = Mininet(
         controller=None,
         switch=OVSSwitch,
@@ -13,39 +15,86 @@ def create_network():
         autoSetMacs=True
     )
 
-    # Create switch in standalone mode
-    s1 = net.addSwitch('s1', failMode='standalone')
+    # Create switches
+    s1 = net.addSwitch("s1", failMode="standalone")
+    s2 = net.addSwitch("s2", failMode="standalone")
 
-    # Create server and clients
-    h1 = net.addHost('h1', ip='10.0.0.1/24')
-    h2 = net.addHost('h2', ip='10.0.0.2/24')
-    h3 = net.addHost('h3', ip='10.0.0.3/24')
-    h4 = net.addHost('h4', ip='10.0.0.4/24')
+    # Server
+    h1 = net.addHost("h1", ip="10.0.0.1/24")
 
-    LINK_DELAY = '0ms'
-    
-    # Configure links
-    for host in [h1, h2, h3, h4]:
-        net.addLink(
-            host,
-            s1,
-            bw=10,
-            delay=LINK_DELAY,
-            loss=0
-        )
+    # Clients
+    h2 = net.addHost("h2", ip="10.0.0.2/24")
+    h3 = net.addHost("h3", ip="10.0.0.3/24")
+    h4 = net.addHost("h4", ip="10.0.0.4/24")
 
-    net.start()
+    # Access links: 10 Mbps
+    net.addLink(h1, s1, bw=10)
 
-    print("\nNetwork ready!")
-    print("Server: h1")
-    print("Clients: h2, h3, h4")
-    print("Bandwidth: 10 Mbps per link")
-    print(f"Delay: {LINK_DELAY} per link\n")
+    for host in (h2, h3, h4):
+        net.addLink(host, s2, bw=10)
 
-    CLI(net)
-    net.stop()
+    # Shared bottleneck between switches
+    net.addLink(
+        s1,
+        s2,
+        bw=args.bw,
+        delay=args.delay,
+        loss=args.loss
+    )
+
+    try:
+        net.start()
+        if args.qos:
+            configure_qos("s1-eth2", args.bw)
+            configure_qos("s2-eth4", args.bw)
+
+        print("\n=== Network Time Synchronization ===")
+        print("Server: h1 (10.0.0.1)")
+        print("Clients: h2, h3, h4")
+        print(f"Bottleneck bandwidth: {args.bw} Mbps")
+        print(f"Bottleneck delay: {args.delay}")
+        print(f"Bottleneck packet loss: {args.loss}%")
+        print("\nCommands: pingall, net, nodes\n")
+
+        CLI(net)
+
+    finally:
+        net.stop()
 
 
-if __name__ == '__main__':
-    setLogLevel('info')
-    create_network()
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Mininet network topology"
+    )
+
+    parser.add_argument(
+        "--bw",
+        type=float,
+        default=2.0,
+        help="Bottleneck bandwidth (Mbps)",
+    )
+
+    parser.add_argument(
+        "--delay",
+        default="10ms",
+        help="Bottleneck one-way delay"
+    )
+
+    parser.add_argument(
+        "--loss",
+        type=float,
+        default=0.0,
+        help="Packet loss percentage"
+    )
+
+    parser.add_argument(
+        "--qos",
+        action="store_true",
+        help="Enable priority-based QoS on the bottleneck"
+)
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    setLogLevel("info")
+    create_network(parse_args())

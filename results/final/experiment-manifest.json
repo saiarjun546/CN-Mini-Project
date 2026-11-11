@@ -1,0 +1,71 @@
+{
+  "generated_utc": "2026-11-11T14:15:26.418664+00:00",
+  "purpose": "Formal analysis selection; original experiment results are unchanged",
+  "selection": {
+    "congestion": "3 trials per QoS mode at 1, 2, 3 and 5 Mbps",
+    "prioritization": "3 trials per QoS mode at 3 Mbps, 2 clients per trial"
+  },
+  "totals": {
+    "congestion_trials": 24,
+    "prioritization_trials": 6,
+    "sync_measurement_rows": 720
+  },
+  "measurement_counts_by_experiment_and_mode": {
+    "congestion:noqos": 240,
+    "congestion:qos": 240,
+    "prioritization:noqos": 120,
+    "prioritization:qos": 120
+  },
+  "excluded_runs": [
+    {
+      "experiment": "congestion",
+      "directory": "results/congestion/noqos-3mbps-trial1-20261111-180655-394521",
+      "reason": "preliminary 3 Mbps run"
+    },
+    {
+      "experiment": "congestion",
+      "directory": "results/congestion/qos-3mbps-trial1-20261111-181147-120061",
+      "reason": "preliminary 3 Mbps run"
+    },
+    {
+      "experiment": "prioritization",
+      "directory": "results/prioritization/qos-3mbps-trial1-20261111-191806-853566",
+      "reason": "five-request smoke test"
+    }
+  ],
+  "included_congestion_directories": [
+    "results/congestion/noqos-1mbps-trial1-20261111-182058-395146",
+    "results/congestion/noqos-1mbps-trial2-20261111-182231-827710",
+    "results/congestion/noqos-1mbps-trial3-20261111-182406-172778",
+    "results/congestion/noqos-2mbps-trial1-20261111-183836-661919",
+    "results/congestion/noqos-2mbps-trial2-20261111-184012-376519",
+    "results/congestion/noqos-2mbps-trial3-20261111-184148-694435",
+    "results/congestion/noqos-3mbps-trial1-20261111-184818-507334",
+    "results/congestion/noqos-3mbps-trial2-20261111-184955-179172",
+    "results/congestion/noqos-3mbps-trial3-20261111-185131-253278",
+    "results/congestion/noqos-5mbps-trial1-20261111-185802-495038",
+    "results/congestion/noqos-5mbps-trial2-20261111-185939-217589",
+    "results/congestion/noqos-5mbps-trial3-20261111-190115-380863",
+    "results/congestion/qos-1mbps-trial1-20261111-183036-308491",
+    "results/congestion/qos-1mbps-trial2-20261111-183209-870701",
+    "results/congestion/qos-1mbps-trial3-20261111-183344-920128",
+    "results/congestion/qos-2mbps-trial1-20261111-184326-871287",
+    "results/congestion/qos-2mbps-trial2-20261111-184502-108103",
+    "results/congestion/qos-2mbps-trial3-20261111-184639-645801",
+    "results/congestion/qos-3mbps-trial1-20261111-185308-852538",
+    "results/congestion/qos-3mbps-trial2-20261111-185448-162401",
+    "results/congestion/qos-3mbps-trial3-20261111-185624-622577",
+    "results/congestion/qos-5mbps-trial1-20261111-190252-891731",
+    "results/congestion/qos-5mbps-trial2-20261111-190429-199347",
+    "results/congestion/qos-5mbps-trial3-20261111-190604-987237"
+  ],
+  "included_prioritization_directories": [
+    "results/prioritization/noqos-3mbps-trial1-20261111-191921-326517",
+    "results/prioritization/noqos-3mbps-trial2-20261111-192059-534161",
+    "results/prioritization/noqos-3mbps-trial3-20261111-192235-320350",
+    "results/prioritization/qos-3mbps-trial1-20261111-192535-297736",
+    "results/prioritization/qos-3mbps-trial2-20261111-192711-843944",
+    "results/prioritization/qos-3mbps-trial3-20261111-192848-234938"
+  ],
+  "validation_issues": []
+}

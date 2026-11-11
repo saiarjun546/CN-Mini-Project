@@ -1,4 +1,6 @@
+
 import argparse
+
 from qos_config import configure_qos
 from mininet.net import Mininet
 from mininet.node import OVSSwitch
@@ -7,7 +9,18 @@ from mininet.cli import CLI
 from mininet.log import setLogLevel
 
 
-def create_network(args):
+def build_network(bw=2.0, delay="10ms", loss=0.0):
+    """
+    Build the four-host, two-switch Mininet topology.
+
+    h1: Time synchronization server
+    h2: Synchronization client
+    h3: Background traffic generator
+    h4: Additional synchronization client
+
+    Returns an unstarted Mininet network.
+    """
+
     net = Mininet(
         controller=None,
         switch=OVSSwitch,
@@ -37,16 +50,52 @@ def create_network(args):
     net.addLink(
         s1,
         s2,
+        bw=bw,
+        delay=delay,
+        loss=loss
+    )
+
+    return net
+
+
+def start_network(net, bw=2.0, delay="10ms",
+                  loss=0.0, qos=False):
+    """
+    Start Mininet and optionally configure QoS.
+
+    Caller is responsible for calling net.stop().
+    """
+
+    net.start()
+
+    if qos:
+        configure_qos(
+            "s1-eth2", bw, delay, loss
+        )
+        configure_qos(
+            "s2-eth4", bw, delay, loss
+        )
+
+
+def create_network(args):
+    """
+    Start the topology in interactive CLI mode.
+    """
+
+    net = build_network(
         bw=args.bw,
         delay=args.delay,
         loss=args.loss
     )
 
     try:
-        net.start()
-        if args.qos:
-            configure_qos("s1-eth2", args.bw)
-            configure_qos("s2-eth4", args.bw)
+        start_network(
+            net,
+            bw=args.bw,
+            delay=args.delay,
+            loss=args.loss,
+            qos=args.qos
+        )
 
         print("\n=== Network Time Synchronization ===")
         print("Server: h1 (10.0.0.1)")
@@ -54,6 +103,7 @@ def create_network(args):
         print(f"Bottleneck bandwidth: {args.bw} Mbps")
         print(f"Bottleneck delay: {args.delay}")
         print(f"Bottleneck packet loss: {args.loss}%")
+        print(f"QoS enabled: {args.qos}")
         print("\nCommands: pingall, net, nodes\n")
 
         CLI(net)
@@ -71,7 +121,7 @@ def parse_args():
         "--bw",
         type=float,
         default=2.0,
-        help="Bottleneck bandwidth (Mbps)",
+        help="Bottleneck bandwidth (Mbps)"
     )
 
     parser.add_argument(
@@ -90,8 +140,9 @@ def parse_args():
     parser.add_argument(
         "--qos",
         action="store_true",
-        help="Enable priority-based QoS on the bottleneck"
-)
+        help="Enable priority-based QoS"
+    )
+
     return parser.parse_args()
 
 

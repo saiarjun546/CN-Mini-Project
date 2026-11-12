@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""time_client.py -- UDP time synchronization client (four-timestamp / NTP style).
-
-Intended location in the repository: client/time_client.py
-(imports ``VirtualClock`` from client/virtual_clock.py)
-
+"""
 The client talks to ``server/time_server.c`` over UDP, exchanges the four
 timestamps T1..T4, and computes::
 
@@ -12,31 +8,6 @@ timestamps T1..T4, and computes::
 
     theta > 0 : the client clock is BEHIND the server
     theta < 0 : the client clock is AHEAD of the server
-
-T1 and T4 come from a ``VirtualClock`` (a simulated, deliberately wrong client
-clock); T2 and T3 are the server's real ``CLOCK_REALTIME`` readings. The
-server's clock is treated as the reference clock, so the *actual* offset
-(theta convention) is ``reference - virtual`` and the synchronization error is
-``abs(estimated_theta - actual_theta)``.
-
-Wire protocol (version 1, network byte order) -- identical to time_server.c:
-
-    header   "!HBBQ"   magic=0x5453, version=1, msg_type (1=REQUEST, 2=RESPONSE), request_id
-    REQUEST  "!HBBQd"  header + T1                    (20 bytes)
-    RESPONSE "!HBBQdd" header + T2 + T3               (28 bytes)
-
-Limitations
------------
-* The estimate assumes forward and return network delays are about equal. With
-  asymmetric delay the offset error is up to (forward - return) / 2; the result
-  is an estimate, never a guaranteed-exact value.
-* With drift enabled the virtual clock's offset changes during the exchange; the
-  "actual offset" is therefore the average of the true offset at T1 and at T4.
-* Timestamp capture and packing overhead add small (microsecond-level) errors.
-* UDP gives no delivery guarantee: the client uses a timeout, retransmission
-  with a fresh request ID per attempt, and discards stale/malformed replies.
-
-Exit status: 0 if every request succeeded, 1 if any failed, 2 on usage/setup error.
 """
 
 import argparse

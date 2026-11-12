@@ -1,10 +1,11 @@
 # Metrics and Data Format Spec
 
-Network Time Synchronization System. Owner: Member 3 (analysis). Everyone's output code must follow this file.
+Network Time Synchronization System. Owner: Member 3 (analysis).
+This file describes the measurements the experiments produce, how they are analysed, and what the analysis outputs.
 
 ## 1. What is measured
 
-Each sync exchange between a client and the server records four timestamps:
+Each sync request between a client and the server records four timestamps:
 
 | Name | Meaning | Clock used |
 |------|---------|-----------|
@@ -13,108 +14,107 @@ Each sync exchange between a client and the server records four timestamps:
 | T3 | Server sends reply | Server |
 | T4 | Client receives reply | Client |
 
-Formulas (computed by the client):
+Formulas (computed by `client/time_client.py`):
 
-- Round-trip delay = (T4 - T1) - (T3 - T2)
+- Round-trip delay (RTT) = (T4 - T1) - (T3 - T2)
 - Estimated offset = ((T2 - T1) + (T3 - T4)) / 2
 
-The offset formula assumes the path delay is the same in both directions. If it is not (for example under congestion), the estimate is wrong. Measuring this is the purpose of the project.
+Sign convention: offset = server clock - client clock. A positive offset means the client clock is behind the server.
 
-## 2. The true offset problem
+The offset formula assumes the path delay is the same in both directions. Congestion makes one direction slower than the other, which makes the estimate wrong. The error can never exceed about RTT / 2, so large delays give large possible errors.
 
-In testing, all hosts share one real clock, so the real offset is 0 and the error would not be meaningful.
+## 2. How sync error is measured
 
-Fix: the client adds a known fake offset to its own clock when it takes T1 and T4 (for example +2500 ms). This value is logged as `true_offset_ms`.
+All hosts in Mininet share one real clock, so the true offset would be zero. The client therefore runs on a virtual clock (`client/virtual_clock.py`) that is deliberately set about 5000 ms behind the server. This known value is logged as `actual_offset_ms`.
 
-error_ms = est_offset_ms - true_offset_ms
+sync_error = estimated offset - actual offset
 
-Sign convention: the offset is "server clock minus client clock". If the client clock is 2500 ms ahead, the true offset is -2500 ms. The client person must pick one convention and use it consistently in `est_offset_ms` and `true_offset_ms`.
+The analysis uses the absolute value of the error. A perfect sync has an error of 0.
 
-## 3. CSV format
+## 3. Experiments
 
-One file per experiment run. One row per sync exchange (one request/reply attempt). Header row required.
+| Experiment | Clients | Background traffic | Modes | Trials |
+|------------|---------|--------------------|-------|--------|
+| congestion | h2 (one client) | 1, 2, 3 and 5 Mbps | noqos and qos | 3 per mode and level |
+| prioritization | h2 and h4 (at the same time) | 3 Mbps | noqos and qos | 3 per mode |
 
-File name: `<scenario>_<run_id>.csv`, for example `congested_prio_run1.csv`. Place in the `data/` folder.
+Common settings: 2 Mbps bottleneck link, 10 ms link delay, 0% configured packet loss, 90 s of background traffic, 20 sync requests per client per trial, server at 10.0.0.1:5005.
 
-| Column | Type | Unit | Description |
-|--------|------|------|-------------|
-| scenario | string | - | Scenario name from section 4 |
-| run_id | int | - | Repeat number of this scenario (1, 2, 3 ...) |
-| param | string | - | Sweep value, such as `delay=50` or `clients=3`. Use `none` if not a sweep |
-| client_id | int | - | Client number (1, 2, 3 ...) |
-| seq | int | - | Sequence number of the request, starting at 0 per client |
-| t1 | int | ns | Client send time |
-| t2 | int | ns | Server receive time |
-| t3 | int | ns | Server send time |
-| t4 | int | ns | Client receive time |
-| delay_ms | float | ms | Round-trip delay from the formula |
-| est_offset_ms | float | ms | Estimated offset from the formula |
-| true_offset_ms | float | ms | Fake offset injected into the client clock |
-| error_ms | float | ms | est_offset_ms - true_offset_ms |
-| lost | int | - | 1 if no reply arrived (timeout), else 0 |
+Modes:
+- `noqos`: sync packets share the bottleneck queue with the background traffic.
+- `qos`: sync packets are prioritized over the background traffic.
 
-Rules:
-- Timestamps are integers in nanoseconds. Derived values are floats in milliseconds. Nobody mixes units.
-- For a lost packet, write the row with lost=1 and leave t2, t3, t4, delay_ms, est_offset_ms, error_ms empty.
-- Do not drop lost packets from the file. Packet loss is a metric.
-- Timeout for declaring a loss: 1000 ms (adjust if the group agrees).
+A request that gets no valid reply within the 2 s timeout is recorded with status `FAILED`.
 
-Example rows:
+## 4. Data format
 
-```
-scenario,run_id,param,client_id,seq,t1,t2,t3,t4,delay_ms,est_offset_ms,true_offset_ms,error_ms,lost
-baseline,1,none,1,0,1000000000,1010100000,1010200000,1020400000,20.3,-2500.1,-2500.0,-0.1,0
-congested_noprio,1,none,1,5,5000000000,,,,,,-2500.0,,1
-```
+Input to the analysis: `results/final/all-sync-measurements.csv` (created by `experiments/consolidate_results.py`). One row per sync request.
 
-## 4. Scenarios
+| Column | Unit | Description |
+|--------|------|-------------|
+| experiment | - | `congestion` or `prioritization` |
+| mode | - | `noqos` or `qos` |
+| offered_traffic_mbps | Mbps | Background traffic rate |
+| trial | - | Trial number (1 to 3) |
+| client | - | Client host (h2 or h4) |
+| status | - | `SUCCESS` or `FAILED` |
+| sequence, request_id | - | Request number within the trial |
+| t1, t2, t3, t4 | seconds | Timestamps (see section 1) |
+| rtt_s, rtt_ms | s, ms | Round-trip delay |
+| estimated_offset_s, estimated_offset_ms | s, ms | Estimated offset |
+| actual_offset_s, actual_offset_ms | s, ms | Known virtual-clock offset |
+| sync_error_s, sync_error_ms | s, ms | Difference between estimated and actual offset |
+| retries | - | Retries used |
+| error | - | Reason text for a failed request |
 
-| Scenario | Description |
-|----------|-------------|
-| baseline | No background traffic, no priority |
-| congested_noprio | Background traffic on the bottleneck link, sync traffic not prioritized |
-| congested_prio | Same background traffic, sync traffic prioritized |
-| delay_sweep | Link delay set to 10, 50, 100, 200 ms (param = `delay=<ms>`) |
-| clients_sweep | 1, 3, 5 clients at the same time (param = `clients=<n>`) |
+Failed rows have no timestamps after the request and no RTT or error values.
 
-Run each scenario at least 3 times (run_id 1 to 3). Send at least 200 exchanges per client per run, one every 100 ms or similar.
+Per-trial summaries are in `results/final/congestion-summary.csv` and `results/final/prioritization-summary.csv`. The list of included and excluded runs is in `results/final/experiment-manifest.json`.
 
-## 5. Metrics computed by the analysis scripts
+## 5. Metrics computed
 
-Per scenario (and per param value for sweeps):
+For each mode and traffic level (and for each client in the prioritization experiment):
 
-- Delay: mean, median, p95, p99 (ms)
-- Jitter: standard deviation of delay (ms)
-- Offset error: mean absolute error, max absolute error, standard deviation (ms)
-- Packet loss: lost rows / total rows (%)
-- Per client: mean absolute error for each client_id
+- Requests, successful, failed, success rate (%)
+- RTT: mean, median, 95th percentile (ms)
+- Jitter: standard deviation of RTT (ms)
+- Absolute sync error: mean, median, maximum (ms)
 
-## 6. Graphs produced
+Failed requests are counted in the success rate only. RTT and error statistics use successful requests only, so a level with very few successes has averages built on very little data. The median is more reliable than the mean here, because a few late replies can pull the mean up.
 
-1. Box plot of error_ms per scenario (main comparison)
-2. CDF of delay_ms: congested_noprio vs congested_prio
-3. Delay over time (seq) per scenario
-4. Bar chart of mean absolute error per scenario
-5. Mean absolute error vs link delay (delay_sweep)
-6. Mean absolute error vs number of clients (clients_sweep)
+## 6. Outputs
 
-All graphs are saved as PNG in `results/`.
-
-## 7. Folder layout in the repo
+Run from the repository root:
 
 ```
-server/      C server
-client/      Python client
-mininet/     network topology and traffic scripts
-analysis/    this spec, analysis scripts, requirements.txt
-data/        CSV files from experiments
-results/     graphs and metrics tables
+pip install -r analysis/requirements.txt
+python analysis/analyze_results.py
 ```
 
-## 8. Open items to agree as a group
+This writes to `results/analysis/`:
 
-- Sign convention for the offset (section 2)
-- Fake offset value (suggested: 2500 ms)
-- Timeout for packet loss (suggested: 1000 ms)
-- Who owns the Mininet part
-- Packet binary format between C server and Python client (suggested: network byte order, client_id 4 bytes, seq 4 bytes, then T1, T2, T3 as 8-byte integers)
+- `metrics_congestion.csv`, `metrics_prioritization.csv`
+- `1_success_rate_vs_traffic.png`: percentage of requests answered vs traffic
+- `2_rtt_vs_traffic.png`: mean RTT vs traffic (log scale)
+- `3_error_vs_traffic.png`: mean sync error vs traffic (log scale)
+- `4_two_clients_priority.png`: h2 and h4 together, with and without QoS
+- `5_error_vs_rtt.png`: sync error vs RTT, with the RTT / 2 bound
+- `6_error_boxplot.png`: error distribution per traffic level
+
+## 7. Repository layout
+
+```
+server/        C UDP time server
+client/        Python client and virtual clock
+topology/      Mininet topology, QoS and traffic scripts
+experiments/   Experiment runners and result consolidation
+analysis/      This spec, analyze_results.py, requirements.txt
+results/       Raw results, results/final (consolidated) and results/analysis (graphs, tables)
+tests/         Timestamp math tests
+```
+
+## 8. Known limits
+
+- Link delay was fixed at 10 ms, so there is no delay sweep in the results.
+- Only the 1 to 5 Mbps traffic levels on a 2 Mbps bottleneck were tested, with one client (congestion) or two clients (prioritization).
+- At 3 Mbps without QoS, no request was answered in the congestion experiment, and at 5 Mbps without QoS only 3 of 60 were. Error figures for those points are based on very few or no samples.

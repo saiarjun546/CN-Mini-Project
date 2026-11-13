@@ -1,4 +1,4 @@
-mode,offered_traffic_mbps,requests,successful,failed,success_rate_pct,rtt_mean_ms,rtt_median_ms,rtt_p95_ms,jitter_ms,error_mean_ms,error_median_ms,error_max_ms
+mode,offered_traffic_mbps,requests,successful,failed,success_rate_pct,rtt_mean_ms,rtt_median_ms,rtt_p95_ms,rtt_std_ms,error_mean_ms,error_median_ms,error_max_ms
 noqos,1.0,60.0,60.0,0.0,100.0,35.13,23.6,81.72,34.89,5.28,0.71,102.85
 noqos,2.0,60.0,15.0,45.0,25.0,1154.67,1168.78,1753.87,462.56,563.83,565.83,954.45
 noqos,3.0,60.0,0.0,60.0,0.0,,,,,,,

@@ -12,7 +12,10 @@ Conventions (from client/time_client.py):
     offset = ((T2 - T1) + (T3 - T4)) / 2      (server clock - client clock)
     sync_error = |estimated offset - actual offset|
 A request with status FAILED got no valid reply within the 2 s timeout, so it has
-no RTT or error. Those are counted in the success rate, not in the averages.
+no RTT or error. Those are counted in the success rate, not in the averages:
+ALL RTT and sync-error statistics use successful requests only.
+rtt_std_ms is the standard deviation of RTT across successful requests. It is not
+the packet delay variation (jitter) reported by iperf.
 """
 import os
 import sys
@@ -42,8 +45,38 @@ plt.rcParams.update({
 })
 
 
+REQUIRED_COLUMNS = ["experiment", "mode", "offered_traffic_mbps", "client", "status",
+                    "rtt_ms", "estimated_offset_ms", "actual_offset_ms", "sync_error_ms"]
+
+
+def validate(d, path):
+    """Stop with a clear message if the CSV does not look like the expected format."""
+    missing = [c for c in REQUIRED_COLUMNS if c not in d.columns]
+    if missing:
+        sys.exit(f"ERROR: {path} is missing column(s): {', '.join(missing)}.\n"
+                 f"Expected at least: {', '.join(REQUIRED_COLUMNS)}.\n"
+                 "The CSV format may have changed; check experiments/consolidate_results.py.")
+    if d.empty:
+        sys.exit(f"ERROR: {path} has no data rows.")
+    bad_status = set(d["status"].dropna().unique()) - {"SUCCESS", "FAILED"}
+    if bad_status:
+        print(f"WARNING: unexpected status value(s) {sorted(bad_status)}; "
+              "they are treated as failed requests.")
+    bad_mode = set(d["mode"].dropna().unique()) - set(MODES)
+    if bad_mode:
+        print(f"WARNING: unexpected mode value(s) {sorted(bad_mode)}; "
+              "they are left out of the graphs.")
+    for exp in ("congestion", "prioritization"):
+        if exp not in set(d["experiment"]):
+            print(f"WARNING: no '{exp}' rows found; its tables and graphs will be empty.")
+
+
 def load(path):
+    if not os.path.isfile(path):
+        sys.exit(f"ERROR: input file not found: {path}\n"
+                 "Run from the repository root, or pass the CSV path as the first argument.")
     d = pd.read_csv(path)
+    validate(d, path)
     for c in ["rtt_ms", "sync_error_ms", "actual_offset_ms", "estimated_offset_ms",
               "offered_traffic_mbps"]:
         d[c] = pd.to_numeric(d[c], errors="coerce")
@@ -62,15 +95,20 @@ def summarize(g):
         "rtt_mean_ms": s.rtt_ms.mean(),
         "rtt_median_ms": s.rtt_ms.median(),
         "rtt_p95_ms": s.rtt_ms.quantile(0.95),
-        "jitter_ms": s.rtt_ms.std(),
+        "rtt_std_ms": s.rtt_ms.std(),
         "error_mean_ms": s.abs_error_ms.mean(),
         "error_median_ms": s.abs_error_ms.median(),
         "error_max_ms": s.abs_error_ms.max(),
     })
 
 
-def save(fig, out, name):
-    fig.tight_layout()
+def save(fig, out, name, foot=None):
+    """Save a figure; `foot` is a small caption line under the plot."""
+    if foot:
+        fig.text(0.01, 0.012, foot, ha="left", va="bottom", fontsize=8, color=MUTED)
+        fig.tight_layout(rect=(0, 0.05, 1, 1))
+    else:
+        fig.tight_layout()
     fig.savefig(os.path.join(out, name), dpi=160)
     plt.close(fig)
 
@@ -81,7 +119,7 @@ def line_by_mode(d, col, ylabel, title, out, name, log=False, note=None):
     levels = sorted(d.offered_traffic_mbps.unique())
     for m in MODES:
         g = d[d["mode"] == m].groupby("offered_traffic_mbps")
-        y = g[col].apply(lambda s: s.mean())
+        y = g[col].apply(lambda s: s.mean()).reindex(levels)   # NaN where nothing answered
         ax.plot(y.index, y.values, color=COLOR[m], label=LABEL[m], marker="o", markersize=7,
                 markeredgecolor=SURFACE, markeredgewidth=2)
     if log:
@@ -91,10 +129,7 @@ def line_by_mode(d, col, ylabel, title, out, name, log=False, note=None):
     ax.set_ylabel(ylabel)
     ax.set_title(title, pad=10)
     ax.legend(loc="best")
-    if note:
-        ax.annotate(note, xy=(0.99, 0.02), xycoords="axes fraction", ha="right", fontsize=8,
-                    color=MUTED)
-    save(fig, out, name)
+    save(fig, out, name, foot=note)
 
 
 def plot_success(cong, out):
@@ -141,13 +176,22 @@ def plot_prio(pri, out):
     fig.legend(handles, labels, loc="upper right", ncol=2, bbox_to_anchor=(0.99, 0.99))
     fig.suptitle("Two clients syncing at once, 3 Mbps background traffic", x=0.01, ha="left",
                  fontsize=12, color=INK)
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    parts = []
+    for m in MODES:
+        for c in clients:
+            r = s[(s.client == c) & (s["mode"] == m)].iloc[0]
+            parts.append(f"{c} {'QoS' if m == 'qos' else 'no QoS'}: "
+                         f"{int(r.successful)}/{int(r.requests)}")
+    fig.text(0.01, 0.012, "Round-trip delay and sync error use successful requests only "
+             "(successful/total: " + ", ".join(parts) + "). Few samples = unreliable average.",
+             ha="left", va="bottom", fontsize=8, color=MUTED)
+    fig.tight_layout(rect=(0, 0.06, 1, 0.93))
     fig.savefig(os.path.join(out, "4_two_clients_priority.png"), dpi=160)
     plt.close(fig)
 
 
 def plot_error_vs_rtt(d, out):
-    """Sync error can never exceed about RTT/2, so error tracks RTT."""
+    """Explore the relationship between RTT and synchronization error."""
     s = d[d.ok]
     fig, ax = plt.subplots(figsize=(7.5, 4.4))
     for m in MODES:
@@ -155,14 +199,15 @@ def plot_error_vs_rtt(d, out):
         ax.scatter(g.rtt_ms, g.abs_error_ms, s=22, color=COLOR[m], alpha=0.7, label=LABEL[m],
                    edgecolors=SURFACE, linewidths=0.8)
     mx = s.rtt_ms.max()
-    ax.plot([0, mx], [0, mx / 2], color=MUTED, linewidth=1, linestyle="--")
-    ax.annotate("error = RTT / 2 (worst case)", xy=(mx * 0.62, mx * 0.62 / 2), xytext=(0, 8),
-                textcoords="offset points", fontsize=8, color=MUTED)
+    ax.plot([0, mx], [0, mx / 2], color=MUTED, linewidth=1, linestyle="--",
+            label="RTT/2 reference (idealized assumptions)")
     ax.set_xlabel("Round-trip delay (ms)")
     ax.set_ylabel("Absolute sync error (ms)")
-    ax.set_title("Sync error grows with round-trip delay", pad=10)
+    ax.set_title("Sync error vs round-trip delay", pad=10)
     ax.legend(loc="upper left")
-    save(fig, out, "5_error_vs_rtt.png")
+    save(fig, out, "5_error_vs_rtt.png",
+         foot="Successful requests only. The dashed line is an idealized reference, "
+              "not a guaranteed upper bound.")
 
 
 def plot_box(cong, out):
@@ -196,9 +241,8 @@ def plot_box(cong, out):
     ax.set_title("Sync error distribution (successful syncs only)", pad=10)
     ax.grid(axis="x", visible=False)
     ax.legend(loc="upper left")
-    ax.annotate("No box = no sync request was answered", xy=(0.99, 0.02),
-                xycoords="axes fraction", ha="right", fontsize=8, color=MUTED)
-    save(fig, out, "6_error_boxplot.png")
+    save(fig, out, "6_error_boxplot.png",
+         foot="Successful requests only. No box = no request was answered.")
 
 
 def main():
@@ -214,7 +258,7 @@ def main():
     mc.to_csv(os.path.join(out, "metrics_congestion.csv"))
     mp.to_csv(os.path.join(out, "metrics_prioritization.csv"))
 
-    note = "Missing point = no sync request was answered"
+    note = "Averages use successful requests only. Missing point = no request was answered."
     plot_success(cong, out)
     line_by_mode(cong[cong.ok], "rtt_ms", "Mean round-trip delay (ms, log scale)",
                  "Round-trip delay under congestion", out, "2_rtt_vs_traffic.png", log=True,

@@ -21,7 +21,7 @@ Formulas (computed by `client/time_client.py`):
 
 Sign convention: offset = server clock - client clock. A positive offset means the client clock is behind the server.
 
-The offset formula assumes the path delay is the same in both directions. Congestion makes one direction slower than the other, which makes the estimate wrong. The error can never exceed about RTT / 2, so large delays give large possible errors.
+The offset formula assumes the path delay is the same in both directions. Congestion makes one direction slower than the other, which makes the estimate wrong. Under idealized assumptions (stable clocks, accurate timestamps) the error is at most about RTT / 2, so large delays allow large errors. This is a reference, not a guarantee.
 
 ## 2. How sync error is measured
 
@@ -77,10 +77,10 @@ For each mode and traffic level (and for each client in the prioritization exper
 
 - Requests, successful, failed, success rate (%)
 - RTT: mean, median, 95th percentile (ms)
-- Jitter: standard deviation of RTT (ms)
+- RTT standard deviation (`rtt_std_ms`): standard deviation of RTT across successful requests (ms). This is not the packet delay variation (jitter) that iperf reports
 - Absolute sync error: mean, median, maximum (ms)
 
-Failed requests are counted in the success rate only. RTT and error statistics use successful requests only, so a level with very few successes has averages built on very little data. The median is more reliable than the mean here, because a few late replies can pull the mean up.
+Failed requests are counted in the success rate only. All RTT and error statistics, in the tables and in every graph, use successful requests only, so a level with very few successes has averages built on very little data. The median is more reliable than the mean here, because a few late replies can pull the mean up.
 
 ## 6. Outputs
 
@@ -91,14 +91,14 @@ pip install -r analysis/requirements.txt
 python analysis/analyze_results.py
 ```
 
-This writes to `results/analysis/`:
+The script first checks that the input CSV has the required columns and stops with a clear message if the format has changed. It writes to `results/analysis/`:
 
 - `metrics_congestion.csv`, `metrics_prioritization.csv`
 - `1_success_rate_vs_traffic.png`: percentage of requests answered vs traffic
 - `2_rtt_vs_traffic.png`: mean RTT vs traffic (log scale)
 - `3_error_vs_traffic.png`: mean sync error vs traffic (log scale)
 - `4_two_clients_priority.png`: h2 and h4 together, with and without QoS
-- `5_error_vs_rtt.png`: sync error vs RTT, with the RTT / 2 bound
+- `5_error_vs_rtt.png`: sync error vs RTT, with an idealized RTT / 2 reference line
 - `6_error_boxplot.png`: error distribution per traffic level
 
 ## 7. Repository layout
